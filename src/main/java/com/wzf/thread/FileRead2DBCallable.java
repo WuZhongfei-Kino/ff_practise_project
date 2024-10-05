@@ -1,8 +1,11 @@
 package com.wzf.thread;
 
+import com.wzf.domain.DealResultData;
 import com.wzf.domain.InDB;
 import com.wzf.utils.BatchNumberGenerator;
 import com.wzf.utils.JdbcUtil;
+import com.wzf.utils.ThreadLocalUtil;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 import java.io.BufferedReader;
@@ -11,11 +14,13 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * @author WuZhongfei
  * @date 2024年09月30日 10:42
  */
+@Slf4j
 public class FileRead2DBCallable implements Callable {
     /**
      * 1. 创建线程池（容纳线程数根据以下业务要求）
@@ -46,6 +51,8 @@ public class FileRead2DBCallable implements Callable {
 
     private JdbcUtil jdbcUtil;
 
+    private DealResultData dealResultData;
+
 
     public FileRead2DBCallable(BatchNumberGenerator batchNumberGenerator, ThreadPoolTaskExecutor threadPoolExecutor, JdbcUtil jdbcUtil) {
         this.batchNumberGenerator = batchNumberGenerator;
@@ -56,35 +63,63 @@ public class FileRead2DBCallable implements Callable {
     @Override
     public Object call() throws Exception {
 
+        fileName = "content.txt";
+        dealResultData = new DealResultData();
+        String line;
+        Integer lineNum = 1;
+        queue = new ArrayBlockingQueue<>(11);
+        List<InDB> inDBList = new ArrayList<>();
+//            Integer count = (int) reader.lines().count();
+        AtomicInteger lineInteger = new AtomicInteger(0);
+        AtomicInteger comsumeCount = new AtomicInteger();//消费总数
+        AtomicInteger intoDBCount = new AtomicInteger();//入库总数
         try (
             BufferedReader reader = new BufferedReader(new FileReader("text/content.txt"))) {
-            System.out.println("文件:"+reader);
-            String line;
-            InDB inDB = new InDB();
-            inDB.setFromFile(fileName);
-            Integer lineNum = 1;
-            List<InDB> inDBList = new ArrayList<>();
-            Integer count = (int) reader.lines().count();
-            queue = new ArrayBlockingQueue<>(count);
-            countDownLatch = new CountDownLatch(count);
+
+//            countDownLatch = new CountDownLatch(count);
             while ((line = reader.readLine()) != null) {
-                System.out.println("读取一行的内容:"+line);
-                //生成批次号
+                InDB inDB = new InDB();
+                inDB.setFromFile(fileName);
+                //生成主体批次号
                 String batchNumber = batchNumberGenerator.generateNewBatchNumber(fileName, lineNum);
                 inDB.setBatchId(batchNumber);
                 //添加文本内容
                 inDB.setContent(line);
-                //先判断队列里元素是否有10个
-                if (queue.size() < 10){
-                    queue.offer(inDB);
-                } else {
-                    //队列元素满10个，先把队列里的元素全部入库
-                  //分配任务线程执行入库操作
-                    Object subThread = threadPoolExecutor.submit(new ImportDBCallable(jdbcUtil, queue)).get();
-                    System.out.println("子线程执行结果:"+subThread);
-                }
+                lineInteger.incrementAndGet();
                 lineNum ++;
-                System.out.println(line);
+                //入队列
+                queue.offer(inDB);
+//                主线程实时打印进度：总生产个数和总消费个数（可使用AtomicInteger作为累加），以及mysql表已写入条数
+                log.info("主线程：{} 总生产个数：{}",Thread.currentThread().getName(), lineInteger.get());
+//                log.info("主线程：{} 总消费个数：{}",Thread.currentThread().getName(), queue.size());
+                if (lineInteger.get() % 10 == 0){
+                    //线程做到每发送10个元素后，等待任务线程消费处理完成后继续发送，这一批的10个元素处理就是一个批次
+                    if (queue.size() == 10){
+                        //分配任务线程执行入库操作
+                        Object subThread = threadPoolExecutor.submit(new ImportDBCallable(jdbcUtil, queue)).get();
+                        DealResultData subThreadResult = (DealResultData) subThread;
+                        comsumeCount.set(comsumeCount.get()+subThreadResult.getDealCount());
+                        intoDBCount.set(intoDBCount.get() + subThreadResult.getIntoDBCount());
+                        log.info("任务线程：{}, 处理数量:{}", subThreadResult.getThreadName(), subThreadResult.getDealCount());
+                        log.info("主线程：{} 总消费个数：{}", Thread.currentThread().getName(), comsumeCount.get());
+                        log.info("主线程：{} mysql表已写入条数：{}", Thread.currentThread().getName(), intoDBCount.get());
+                        System.err.println(subThread+"==>"+this);
+                    }
+                }
+
+                //先判断队列里元素是否有10个
+//                if (queue.size() < 10){
+//                    //未满，入队列
+//                    queue.
+//                            offer(inDB);
+//                } else {
+//                    //队列元素满10个，取元素，先把队列里的元素全部入库
+////                    queue.
+//
+////                    Object subThread = threadPoolExecutor.submit(new ImportDBCallable(jdbcUtil, queue)).get();
+////                    System.out.println("子线程执行结果:"+subThread);
+//                }
+
 //                    queue.offer()
 //                    queue.put(line); // 将行内容放入队列，如果队列满，这里会阻塞
             }

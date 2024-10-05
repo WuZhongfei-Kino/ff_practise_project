@@ -38,7 +38,6 @@ public class FileDealServiceImpl implements FileDealService {
         Thread thread = new Thread(futureTask);
         thread.start();
         Object o = futureTask.get();
-        System.out.println("主线程执行结果:"+o);
         return 0;
     }
 }

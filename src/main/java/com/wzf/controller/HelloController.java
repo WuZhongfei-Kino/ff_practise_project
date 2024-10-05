@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.lang.reflect.InvocationTargetException;
 import java.sql.Connection;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.List;
 
@@ -23,13 +24,13 @@ import java.util.List;
 @ComponentScan("com.wzf")
 public class HelloController {
     @GetMapping("/say")
-    public String sayHello() throws SQLException, NoSuchFieldException, InvocationTargetException, NoSuchMethodException, InstantiationException, IllegalAccessException {
+    public String sayHello() throws Exception {
 //        final Connection connection = JdbcUtil.getConnection();
 //        AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext();
 //        context.refresh();
 //        JdbcUtil jdbcUtil = context.register(JdbcUtil.class);
         JdbcUtil jdbcUtil = new JdbcUtil();
-        List<InDB> inDBList = jdbcUtil.selectSql(InDB.class, "select * from indb where id = ?", "1");
+        List<InDB> inDBList = jdbcUtil.executeQuery(InDB.class, "select * from indb where id = ?", "1");
 
         System.out.println(inDBList);
         return "Hello World!";
