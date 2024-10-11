@@ -3,6 +3,7 @@ package com.wzf.utils;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.UUID;
 
 /**
  * @author WuZhongfei
@@ -32,6 +33,15 @@ public class BatchNumberGenerator {
                 }
             }
         }
+        return batchNum;
+    }
+
+    public String generateNewBatchNumber() {
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyyMMddHH");
+        String currentTime = sdf.format(new Date());
+        String randomString = UUID.randomUUID().toString().replaceAll("-", "").substring(0, 2);
+        String batchNum = randomString + currentTime ;
+
         return batchNum;
     }
 }
