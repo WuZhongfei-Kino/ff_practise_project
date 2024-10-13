@@ -87,8 +87,8 @@ public class FileRead2DBCallable implements Callable {
                 InDB inDB = new InDB();
                 inDB.setFromFile(fileName);
                 //生成主体批次号
-                String batchNumber = batchNumberGenerator.generateNewBatchNumber(fileName, lineNum);
-                inDB.setBatchId(batchNumber);
+                //String batchNumber = batchNumberGenerator.generateNewBatchNumber(fileName, lineNum);
+                inDB.setBatchId(lineNum.toString());
                 //添加文本内容
                 inDB.setContent(line);
                 lineInteger.incrementAndGet();
@@ -101,19 +101,18 @@ public class FileRead2DBCallable implements Callable {
                 if (lineInteger.get() % 10 == 0){
                     //线程做到每发送10个元素后，等待任务线程消费处理完成后继续发送，这一批的10个元素处理就是一个批次
                     if (queue.size() == 10){
-                        //分配任务线程执行入库操作
-                        Object subThread = threadPoolExecutor.submit(new ImportDBCallable(jdbcUtil, queue)).get();
-                        DealResultData subThreadResult = (DealResultData) subThread;
-                        comsumeCount.set(comsumeCount.get()+subThreadResult.getDealCount());
-                        intoDBCount.set(intoDBCount.get() + subThreadResult.getIntoDBCount());
-                        log.info("任务线程：{}, 处理数量:{}", subThreadResult.getThreadName(), subThreadResult.getDealCount());
-                        log.info("主线程：{} 总消费个数：{}", Thread.currentThread().getName(), comsumeCount.get());
-                        log.info("主线程：{} mysql表已写入条数：{}", Thread.currentThread().getName(), intoDBCount.get());
+                        importData2DBThread(comsumeCount, intoDBCount, queue);
 //                        System.err.println(subThread+"==>"+this);
                     }
                 }
 
             }
+            //判断队列中是否存在有未入库的数据
+            if (queue.size() != 0){
+                //生成新的线程执行入库操作
+                importData2DBThread(comsumeCount, intoDBCount, queue);
+            }
+            System.out.println("入库后的队列长度:"+queue.size());
             //判断文件内容是否全都入库
             if (intoDBCount.get() == lineInteger.get()){
                 //清空队列
@@ -139,5 +138,25 @@ public class FileRead2DBCallable implements Callable {
 
         return null;
 
+    }
+
+    /**
+     *
+     * @param comsumeCount 消费总数
+     * @param intoDBCount 入库总数
+     * @param queue 队列
+     * @throws InterruptedException
+     * @throws ExecutionException
+     */
+
+    private void importData2DBThread(AtomicInteger comsumeCount, AtomicInteger intoDBCount, BlockingQueue<InDB> queue) throws InterruptedException, ExecutionException {
+        //分配任务线程执行入库操作
+        Object subThread = threadPoolExecutor.submit(new ImportDBCallable(jdbcUtil, queue)).get();
+        DealResultData subThreadResult = (DealResultData) subThread;
+        comsumeCount.set(comsumeCount.get()+subThreadResult.getDealCount());
+        intoDBCount.set(intoDBCount.get() + subThreadResult.getIntoDBCount());
+        log.info("任务线程：{}, 处理数量:{}", subThreadResult.getThreadName(), subThreadResult.getDealCount());
+        log.info("主线程：{} 总消费个数：{}", Thread.currentThread().getName(), comsumeCount.get());
+        log.info("主线程：{} mysql表已写入条数：{}", Thread.currentThread().getName(), intoDBCount.get());
     }
 }
