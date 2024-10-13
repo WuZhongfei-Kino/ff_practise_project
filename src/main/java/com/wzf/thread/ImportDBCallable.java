@@ -59,6 +59,8 @@ public class ImportDBCallable implements Callable {
         countDownLatch = new CountDownLatch(queue.size());
         AtomicInteger dealCount = new AtomicInteger();//处理数量
         AtomicInteger intoDBCount = new AtomicInteger();//入库数量
+        //生成这一批次的批次号
+        String batchNum = new BatchNumberGenerator().generateNewBatchNumber();
         while (queue.size() > 0) {
 //            InDB inDB = queue.take();//无限阻塞等待，直到队列存在数据可删。
             InDB inDB = queue.poll();
@@ -69,6 +71,9 @@ public class ImportDBCallable implements Callable {
 //            params.add(inDB.getBatchId());
 //            params.add(inDB.getFromFile());
 //            params.add(inDB.getContent());
+            //取出文本所在行数
+            Integer lineNum = Integer.valueOf(inDB.getBatchId());
+            inDB.setBatchId(batchNum + lineNum);
             dealCount.incrementAndGet();
 //            log.info("主线程：{} 总消费个数：{}",Thread.currentThread().getName(), dealCount.get());
             inDB.setBatchId(inDB.getBatchId() + dealCount.get());
