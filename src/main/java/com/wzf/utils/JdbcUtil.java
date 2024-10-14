@@ -32,16 +32,10 @@ public class JdbcUtil {
     public static int executeUpdate(String sql, Object... params) throws SQLException {
         Connection connection = SqlConfig.getConnection();
         PreparedStatement preparedStatement = connection.prepareStatement(sql);
-        System.out.println(params.length);
         //可变参数可以当数组使用
         for (int i = 0; i < params.length; i++) {
             preparedStatement.setObject(i + 1, params[i]);
         }
-//        int index = 1;
-//        for (Object paramObj: params) {
-//            System.out.println(paramObj);
-//            preparedStatement.setObject(index, paramObj);
-//        }
         int rows = preparedStatement.executeUpdate();
         preparedStatement.close();
         if (connection.getAutoCommit()) {
