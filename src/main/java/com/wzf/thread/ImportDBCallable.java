@@ -33,9 +33,17 @@ public class ImportDBCallable implements Callable {
 
     BlockingQueue<InDB> queue;
 
+    CountDownLatch countDownLatch;
+
     public ImportDBCallable(JdbcUtil jdbcUtil, BlockingQueue<InDB> queue) {
         this.jdbcUtil = jdbcUtil;
         this.queue = queue;
+    }
+
+    public ImportDBCallable(JdbcUtil jdbcUtil, BlockingQueue<InDB> queue, CountDownLatch countDownLatch) {
+        this.jdbcUtil = jdbcUtil;
+        this.queue = queue;
+        this.countDownLatch = countDownLatch;
     }
 
     @Override
@@ -48,7 +56,7 @@ public class ImportDBCallable implements Callable {
         dealResultData.setDealCount(queue.size());
         dealResultData.setMessage("执行中。。。");
         ThreadLocalUtil.set(dealResultData);
-        System.err.println("当前线程：{}"+Thread.currentThread().getName()+"=="+queue.size());
+        countDownLatch = new CountDownLatch(queue.size());
         AtomicInteger dealCount = new AtomicInteger();//处理数量
         AtomicInteger intoDBCount = new AtomicInteger();//入库数量
         //生成这一批次的批次号
@@ -69,12 +77,12 @@ public class ImportDBCallable implements Callable {
             dealCount.incrementAndGet();
 //            log.info("主线程：{} 总消费个数：{}",Thread.currentThread().getName(), dealCount.get());
             inDB.setBatchId(inDB.getBatchId() + dealCount.get());
-//                System.out.println(Thread.currentThread().getName()+"\t 获取队列元素:"+inDB);
 
                 //执行sql
             int resultRow = jdbcUtil.executeUpdate(sql, inDB.getBatchId(), inDB.getFromFile(), inDB.getContent());
             if (resultRow > 0){
                 intoDBCount.incrementAndGet();
+                countDownLatch.countDown();
             }
 //            if (ThreadLocalUtil.get() == null){
 //                importDBMap.put(Thread.currentThread().getName(), resultRow);
@@ -89,12 +97,14 @@ public class ImportDBCallable implements Callable {
 
             }
         }
-        dealResultData = ThreadLocalUtil.get();
-        dealResultData.setDealCount(dealCount.get());
-        dealResultData.setIntoDBCount(intoDBCount.get());
-        dealResultData.setThreadName(Thread.currentThread().getName());
-        dealResultData.setMessage("完成");
-        ThreadLocalUtil.set(dealResultData);
+        if (countDownLatch.getCount() == 0){
+            dealResultData = ThreadLocalUtil.get();
+            dealResultData.setDealCount(dealCount.get());
+            dealResultData.setIntoDBCount(intoDBCount.get());
+            dealResultData.setThreadName(Thread.currentThread().getName());
+            dealResultData.setMessage("完成");
+            ThreadLocalUtil.set(dealResultData);
+        }
         return ThreadLocalUtil.get();
     }
 }
