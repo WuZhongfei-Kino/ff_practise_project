@@ -80,9 +80,11 @@ public class FileRead2DBCallable implements Callable {
             while ((line = reader.readLine()) != null) {
                 InDB inDB = new InDB();
                 inDB.setFromFile(fileName);
+                //将行数暂时存入批次号属性中
+                inDB.setBatchId(String.valueOf(lineInteger.get()));
                 //生成主体批次号
-                String batchNumber = batchNumberGenerator.generateNewBatchNumber(fileName, lineNum);
-                inDB.setBatchId(batchNumber);
+//                String batchNumber = batchNumberGenerator.generateNewBatchNumber(fileName, lineNum);
+//                inDB.setBatchId(batchNumber);
                 //添加文本内容
                 inDB.setContent(line);
                 lineInteger.incrementAndGet();
@@ -123,7 +125,13 @@ public class FileRead2DBCallable implements Callable {
 //                    queue.offer()
 //                    queue.put(line); // 将行内容放入队列，如果队列满，这里会阻塞
             }
-            queue.clear();
+            if(queue.size() == 0){
+                //清空队列
+                queue.clear();
+            }else {
+                System.out.println("队列还有"+queue.size()+"元素");
+            }
+
             reader.close();
 //                queue.put("EOF"); // 文件读取完毕，放入结束标记
         } catch (IOException e) {
